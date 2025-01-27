@@ -19,6 +19,13 @@ app.use(express.json()); // Parse JSON data
 // Initialize Twilio client
 const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
+// Questions to ask
+const questions = [
+  "Can you explain the difference between props and state in React.js?",
+  "What is middleware in Express.js, and how does it work?",
+  "What is the difference between 'let', 'const', and 'var' in JavaScript?",
+];
+
 // Route to initiate an outbound call
 app.post('/make-call', async (req, res) => {
   const to = '+919493499473'; // Replace with process.env.TO_PHONE_NUMBER if needed
@@ -40,14 +47,15 @@ app.post('/make-call', async (req, res) => {
 });
 
 // TwiML route for the outbound call
-app.post('/voice', async (req, res) => {
+app.post('/voice', (req, res) => {
   const twiml = new twilio.twiml.VoiceResponse();
 
-  // Start the conversation
-  twiml.say('Hello! I am your AI assistant. How can I help you today?');
+  // Ask the first question
+  twiml.say('Hello! I am your AI assistant. I will ask you three questions.');
+  twiml.say('Here is the first question: ' + questions[0]);
   twiml.gather({
     input: 'speech', // Collect speech input
-    action: '/handle-response', // Send user input to this route
+    action: '/handle-response/0', // Send user input to this route
     method: 'POST',
   });
 
@@ -56,39 +64,31 @@ app.post('/voice', async (req, res) => {
 });
 
 // Handle user response
-app.post('/handle-response', async (req, res) => {
+app.post('/handle-response/:questionIndex', async (req, res) => {
+  const questionIndex = parseInt(req.params.questionIndex, 10); // Current question index
   const userSpeech = req.body.SpeechResult; // User's speech input
   const twiml = new twilio.twiml.VoiceResponse();
 
-  // Send user input to OpenAI
-  const gptResponse = await generateResponse(userSpeech);
+  console.log(`Question ${questionIndex + 1}:`, questions[questionIndex]);
+  console.log('User Response:', userSpeech);
 
-  // Play OpenAI's response
-  twiml.say(gptResponse);
-  twiml.gather({
-    input: 'speech',
-    action: '/handle-response',
-    method: 'POST',
-  });
+  // If all questions are answered, end the call
+  if (questionIndex >= questions.length - 1) {
+    twiml.say('Thank you for answering all the questions. Goodbye!');
+    twiml.hangup();
+  } else {
+    // Ask the next question
+    twiml.say('Here is the next question: ' + questions[questionIndex + 1]);
+    twiml.gather({
+      input: 'speech',
+      action: `/handle-response/${questionIndex + 1}`, // Move to the next question
+      method: 'POST',
+    });
+  }
 
   res.type('text/xml');
   res.send(twiml.toString());
 });
-
-// Function to generate response using OpenAI
-async function generateResponse(userInput) {
-  try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
-      messages: [{ role: 'user', content: userInput }],
-    });
-
-    return response.choices[0].message.content;
-  } catch (error) {
-    console.error('Error generating response:', error);
-    return 'Sorry, I encountered an error. Please try again.';
-  }
-}
 
 // Start the server
 const PORT = process.env.PORT || 10000; // Render uses port 10000 by default

@@ -2,7 +2,7 @@ const express = require('express');
 const dotenv = require('dotenv');
 const twilio = require('twilio');
 const OpenAI = require('openai');
-
+const cors = require('cors')
 dotenv.config();
 
 const openai = new OpenAI({

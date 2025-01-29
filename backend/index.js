@@ -3,38 +3,40 @@ const dotenv = require('dotenv');
 const twilio = require('twilio');
 const OpenAI = require('openai');
 
-// Load environment variables
 dotenv.config();
 
-// Initialize OpenAI
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Initialize Express
 const app = express();
-app.use(express.urlencoded({ extended: true })); // Parse form data
-app.use(express.json()); // Parse JSON data
+app.use(
+  cors({
+    origin: 'http://localhost:5173', // Allow only this origin
+    methods: ['GET', 'POST'], // Allow only specific HTTP methods
+    credentials: true, // Allow cookies and credentials
+  })
+);
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
 
-// Initialize Twilio client
 const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
-// Questions to ask
 const questions = [
   "Can you explain the difference between props and state in React.js?",
   "What is middleware in Express.js, and how does it work?",
   "What is the difference between 'let', 'const', and 'var' in JavaScript?",
 ];
 
-// Route to initiate an outbound call
+let conversationLog = [];
+
 app.post('/make-call', async (req, res) => {
   const to = '+919493499473'; // Replace with process.env.TO_PHONE_NUMBER if needed
-  const from = process.env.TWILIO_PHONE_NUMBER; // Use environment variable
+  const from = process.env.TWILIO_PHONE_NUMBER;
 
   try {
-    // Initiate the call
     const call = await client.calls.create({
-      url: `${process.env.BASE_URL}/voice`, // Use Render URL
+      url: `${process.env.BASE_URL}/voice`,
       to: to,
       from: from,
     });
@@ -46,16 +48,14 @@ app.post('/make-call', async (req, res) => {
   }
 });
 
-// TwiML route for the outbound call
 app.post('/voice', (req, res) => {
   const twiml = new twilio.twiml.VoiceResponse();
 
-  // Ask the first question
   twiml.say('Hello! I am your AI assistant. I will ask you three questions.');
   twiml.say('Here is the first question: ' + questions[0]);
   twiml.gather({
-    input: 'speech', // Collect speech input
-    action: '/handle-response/0', // Send user input to this route
+    input: 'speech',
+    action: '/handle-response/0',
     method: 'POST',
   });
 
@@ -63,25 +63,24 @@ app.post('/voice', (req, res) => {
   res.send(twiml.toString());
 });
 
-// Handle user response
 app.post('/handle-response/:questionIndex', async (req, res) => {
-  const questionIndex = parseInt(req.params.questionIndex, 10); // Current question index
-  const userSpeech = req.body.SpeechResult; // User's speech input
+  const questionIndex = parseInt(req.params.questionIndex, 10);
+  const userSpeech = req.body.SpeechResult;
   const twiml = new twilio.twiml.VoiceResponse();
 
-  console.log(`Question ${questionIndex + 1}:`, questions[questionIndex]);
-  console.log('User Response:', userSpeech);
+  conversationLog.push({
+    question: questions[questionIndex],
+    response: userSpeech,
+  });
 
-  // If all questions are answered, end the call
   if (questionIndex >= questions.length - 1) {
     twiml.say('Thank you for answering all the questions. Goodbye!');
     twiml.hangup();
   } else {
-    // Ask the next question
     twiml.say('Here is the next question: ' + questions[questionIndex + 1]);
     twiml.gather({
       input: 'speech',
-      action: `/handle-response/${questionIndex + 1}`, // Move to the next question
+      action: `/handle-response/${questionIndex + 1}`,
       method: 'POST',
     });
   }
@@ -90,8 +89,11 @@ app.post('/handle-response/:questionIndex', async (req, res) => {
   res.send(twiml.toString());
 });
 
-// Start the server
-const PORT = process.env.PORT || 10000; // Render uses port 10000 by default
+app.get('/conversation-log', (req, res) => {
+  res.json(conversationLog);
+});
+
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });

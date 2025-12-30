@@ -2,8 +2,6 @@
 
 ### About the Project
 
-##Live: 
-https://ai-call-1.onrender.com/
 
 This is build using twilio api , openai api 
 tech stack: Tailwind css, react js, express js , node js
